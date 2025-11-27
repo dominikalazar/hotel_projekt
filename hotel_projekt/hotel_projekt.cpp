@@ -1,6 +1,7 @@
 ﻿#include <iostream>
 #include <vector>
 #include <string>
+#include <fstream>
 using namespace std;
 
 class Date {
@@ -35,8 +36,8 @@ public:
     }
 };
 
+// pełne obliczenie dnia tygodnia (Zeller)
 int dayOfWeek(int d, int m, int y) {
-    // Zeller Congruence – pełne obliczanie
     if (m < 3) {
         m += 12;
         y -= 1;
@@ -45,8 +46,7 @@ int dayOfWeek(int d, int m, int y) {
     int J = y / 100;
 
     int h = (d + (13 * (m + 1)) / 5 + K + K / 4 + J / 4 + 5 * J) % 7;
-    // 0 = sobota, 1 = niedziela, 2 = poniedziałek, ...
-    int dayIndex = (h + 5) % 7; // pon=0, wt=1..., niedz=6
+    int dayIndex = (h + 5) % 7; // 0=pon, ..., 6=niedz
     return dayIndex;
 }
 
@@ -59,6 +59,8 @@ public:
 
     Room(int id, string type, int capacity, double price)
         : id(id), type(type), capacity(capacity), basePrice(price) {}
+
+    Room() {}
 };
 
 class Reservation {
@@ -72,6 +74,8 @@ public:
 
     Reservation(int id, string lname, int rid, int p, Date f, Date t)
         : id(id), lastName(lname), roomId(rid), people(p), from(f), to(t) {}
+
+    Reservation() {}
 
     bool conflictsWith(const Reservation& other) {
         if (roomId != other.roomId) return false;
@@ -116,11 +120,8 @@ void addReservation() {
     Date from(d1, m1, y1);
     Date to(d2, m2, y2);
 
-    // sprawdzenie pojemności
     Room* selected = nullptr;
-    for (auto& r : rooms) {
-        if (r.id == rid) selected = &r;
-    }
+    for (auto& r : rooms) if (r.id == rid) selected = &r;
 
     if (selected == nullptr) {
         cout << "Taki pokoj nie istnieje!\n";
@@ -173,7 +174,7 @@ void modifyReservation() {
             cin >> r.to.day >> r.to.month >> r.to.year;
 
             if (!isRoomAvailable(r.roomId, r.from, r.to)) {
-                cout << "Pokoj w tym terminie zajety! Modyfikacja przerwana.\n";
+                cout << "Pokoj w tym terminie zajety! Zmiana anulowana.\n";
                 return;
             }
 
@@ -200,11 +201,14 @@ void searchByDate() {
     int d, m, y;
     cout << "Data (d m r): ";
     cin >> d >> m >> y;
+
     Date x(d, m, y);
 
     for (const auto& r : reservations) {
         if (x >= r.from && x <= r.to) {
-            cout << "ID: " << r.id << " pokoj: " << r.roomId << " nazwisko: " << r.lastName << "\n";
+            cout << "ID: " << r.id
+                << " pokoj: " << r.roomId
+                << " nazwisko: " << r.lastName << "\n";
         }
     }
 }
@@ -216,11 +220,85 @@ void searchById() {
 
     for (const auto& r : reservations) {
         if (r.id == id) {
-            cout << "Znaleziono: " << r.lastName << ", pokoj " << r.roomId << "\n";
+            cout << "Znaleziono: " << r.lastName
+                << ", pokoj " << r.roomId << "\n";
             return;
         }
     }
     cout << "Brak.\n";
+}
+
+void saveRooms() {
+    ofstream file("rooms.txt");
+    if (!file) { cout << "Blad zapisu rooms.txt\n"; return; }
+
+    for (auto& r : rooms) {
+        file << r.id << " " << r.type << " "
+            << r.capacity << " " << r.basePrice << "\n";
+    }
+
+    file.close();
+    cout << "Zapisano pokoje.\n";
+}
+
+void loadRooms() {
+    ifstream file("rooms.txt");
+    if (!file) return;
+
+    rooms.clear();
+
+    int id, cap;
+    string type;
+    double price;
+
+    while (file >> id >> type >> cap >> price) {
+        rooms.push_back(Room(id, type, cap, price));
+    }
+
+    file.close();
+    cout << "Wczytano pokoje.\n";
+}
+
+void saveReservations() {
+    ofstream file("reservations.txt");
+    if (!file) { cout << "Blad zapisu reservations.txt\n"; return; }
+
+    for (auto& r : reservations) {
+        file << r.id << " " << r.lastName << " " << r.roomId << " "
+            << r.people << " "
+            << r.from.day << " " << r.from.month << " " << r.from.year << " "
+            << r.to.day << " " << r.to.month << " " << r.to.year << "\n";
+    }
+
+    file.close();
+    cout << "Zapisano rezerwacje.\n";
+}
+
+void loadReservations() {
+    ifstream file("reservations.txt");
+    if (!file) return;
+
+    reservations.clear();
+
+    int id, rid, people;
+    int d1, m1, y1, d2, m2, y2;
+    string ln;
+
+    while (file >> id >> ln >> rid >> people
+        >> d1 >> m1 >> y1
+        >> d2 >> m2 >> y2)
+    {
+        reservations.push_back(
+            Reservation(id, ln, rid, people,
+                Date(d1, m1, y1),
+                Date(d2, m2, y2))
+        );
+
+        if (id >= nextResId) nextResId = id + 1;
+    }
+
+    file.close();
+    cout << "Wczytano rezerwacje.\n";
 }
 
 void menu() {
@@ -231,13 +309,20 @@ void menu() {
     cout << "4. Szukaj po nazwisku\n";
     cout << "5. Szukaj po dacie\n";
     cout << "6. Szukaj po ID\n";
+    cout << "7. Zapisz dane\n";
+    cout << "8. Wczytaj dane\n";
     cout << "0. Wyjdz\n";
 }
 
 int main() {
-    rooms.push_back(Room(1, "single", 1, 100));
-    rooms.push_back(Room(2, "double", 2, 150));
-    rooms.push_back(Room(3, "suite", 4, 300));
+    loadRooms();
+    loadReservations();
+
+    if (rooms.size() == 0) {
+        rooms.push_back(Room(1, "single", 1, 100));
+        rooms.push_back(Room(2, "double", 2, 150));
+        rooms.push_back(Room(3, "suite", 4, 300));
+    }
 
     int op;
     while (true) {
@@ -252,6 +337,8 @@ int main() {
         if (op == 4) searchByLastName();
         if (op == 5) searchByDate();
         if (op == 6) searchById();
+        if (op == 7) { saveRooms(); saveReservations(); }
+        if (op == 8) { loadRooms(); loadReservations(); }
     }
 
     return 0;
