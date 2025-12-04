@@ -1,345 +1,475 @@
 ﻿#include <iostream>
 #include <vector>
-#include <string>
 #include <fstream>
+#include <string>
+#include <algorithm>
+#include <iomanip>
+
 using namespace std;
+
+/* ------------------------ KLASA DATE ------------------------ */
 
 class Date {
 public:
-    int day, month, year;
+    int d, m, y;
 
-    Date() { day = month = year = 0; }
-    Date(int d, int m, int y) : day(d), month(m), year(y) {}
+    Date() : d(1), m(1), y(2000) {}
+    Date(int dd, int mm, int yy) : d(dd), m(mm), y(yy) {}
 
-    bool operator<=(const Date& other) const {
-        if (year < other.year) return true;
-        if (year > other.year) return false;
-
-        if (month < other.month) return true;
-        if (month > other.month) return false;
-
-        return day <= other.day;
-    }
-
-    bool operator>=(const Date& other) const {
-        if (year > other.year) return true;
-        if (year < other.year) return false;
-
-        if (month > other.month) return true;
-        if (month < other.month) return false;
-
-        return day >= other.day;
+    bool operator<(const Date& other) const {
+        if (y != other.y) return y < other.y;
+        if (m != other.m) return m < other.m;
+        return d < other.d;
     }
 
     bool operator==(const Date& other) const {
-        return day == other.day && month == other.month && year == other.year;
+        return d == other.d && m == other.m && y == other.y;
     }
+
+    string str() const {
+        return to_string(d) + "." + to_string(m) + "." + to_string(y);
+    }
+
+    string dayOfWeek() const {
+        int dd = d;
+        int mm = m;
+        int yy = y;
+
+        if (mm < 3) {
+            mm += 12;
+            yy--;
+        }
+
+        int K = yy % 100;
+        int J = yy / 100;
+
+        int h = (dd + (13 * (mm + 1)) / 5 + K + K / 4 + J / 4 + 5 * J) % 7;
+
+        string days[] = { "Sobota","Niedziela","Poniedziałek","Wtorek","Środa","Czwartek","Piątek" };
+        return string(days[h]);
+    }
+
+    string dayOfWeekStr() const { return dayOfWeek(); }
 };
 
-// pełne obliczenie dnia tygodnia (Zeller)
-int dayOfWeek(int d, int m, int y) {
-    if (m < 3) {
-        m += 12;
-        y -= 1;
-    }
-    int K = y % 100;
-    int J = y / 100;
-
-    int h = (d + (13 * (m + 1)) / 5 + K + K / 4 + J / 4 + 5 * J) % 7;
-    int dayIndex = (h + 5) % 7; // 0=pon, ..., 6=niedz
-    return dayIndex;
+// Funkcja licząca dni między dwoma datami (przybliżenie)
+int daysBetween(const Date& start, const Date& end) {
+    return (end.y - start.y) * 365 + (end.m - start.m) * 30 + (end.d - start.d) + 1;
 }
+
+/* ------------------------ KLASA ROOM ------------------------ */
 
 class Room {
 public:
-    int id;
-    string type;
-    int capacity;
-    double basePrice;
-
-    Room(int id, string type, int capacity, double price)
-        : id(id), type(type), capacity(capacity), basePrice(price) {}
+    int number;      // numer pokoju (unikalny lub typ pokoju)
+    int capacity;    // ile osób mieści
+    double price;    // cena za noc
+    int count;       // ile takich pokoi w hotelu
 
     Room() {}
+    Room(int n, int c, double p, int cnt = 1) : number(n), capacity(c), price(p), count(cnt) {}
+
+    string str() const {
+        return "Pokój " + to_string(number) + " | miejsca: " + to_string(capacity) +
+            " | cena: " + to_string(price) + " | ilość: " + to_string(count);
+    }
 };
+
+
+/* ------------------------ KLASA RESERVATION ------------------------ */
 
 class Reservation {
 public:
     int id;
-    string lastName;
-    int roomId;
-    int people;
-    Date from;
-    Date to;
-
-    Reservation(int id, string lname, int rid, int p, Date f, Date t)
-        : id(id), lastName(lname), roomId(rid), people(p), from(f), to(t) {}
+    string lastname;
+    int roomNumber;
+    Date start;
+    Date end;
 
     Reservation() {}
+    Reservation(int i, string ln, int rn, Date s, Date e)
+        : id(i), lastname(ln), roomNumber(rn), start(s), end(e) {}
 
-    bool conflictsWith(const Reservation& other) {
-        if (roomId != other.roomId) return false;
-        return !(to <= other.from || from >= other.to);
+    bool conflicts(const Reservation& other) const {
+        if (roomNumber != other.roomNumber) return false;
+        return !(end < other.start || other.end < start);
+    }
+
+    string str() const {
+        return "ID: " + to_string(id) + " | " + lastname +
+            " | pokój: " + to_string(roomNumber) +
+            " | " + start.str() + " - " + end.str();
     }
 };
 
+/* ------------------------ GLOBALNE DANE ------------------------ */
+
 vector<Room> rooms;
 vector<Reservation> reservations;
-int nextResId = 1;
+int nextReservationID = 1;
 
-bool isRoomAvailable(int roomId, Date f, Date t) {
-    for (const auto& r : reservations) {
-        if (r.roomId == roomId) {
-            Reservation temp(0, "", roomId, 0, f, t);
-            if (temp.conflictsWith(r)) return false;
+/* ------------------------ ZAPIS / ODCZYT ------------------------ */
+
+void saveToFile() {
+    ofstream f("rooms.txt");
+    for (auto& r : rooms)
+        f << r.number << " " << r.capacity << " " << r.price << "\n";
+    f.close();
+
+    ofstream rfile("reservations.txt");
+    for (auto& r : reservations)
+        rfile << r.id << "|" << r.lastname << "|" << r.roomNumber << "|"
+        << r.start.d << " " << r.start.m << " " << r.start.y << " "
+        << r.end.d << " " << r.end.m << " " << r.end.y << "\n";
+    rfile.close();
+
+
+    ofstream idf("id.txt");
+    idf << nextReservationID;
+    idf.close();
+}
+
+void loadFromFile() {
+    rooms.clear();
+    reservations.clear();
+
+    ifstream f("rooms.txt");
+    int n, c;
+    double p;
+    while (f >> n >> c >> p)
+        rooms.emplace_back(n, c, p);
+
+    ifstream rfile("reservations.txt");
+    string line;
+    while (getline(rfile, line)) {
+        size_t pos1 = line.find('|');
+        size_t pos2 = line.find('|', pos1 + 1);
+        size_t pos3 = line.find('|', pos2 + 1);
+
+        int id = stoi(line.substr(0, pos1));
+        string ln = line.substr(pos1 + 1, pos2 - pos1 - 1);
+        int rn = stoi(line.substr(pos2 + 1, pos3 - pos2 - 1));
+
+        int sd, sm, sy, ed, em, ey;
+        sscanf_s(line.substr(pos3 + 1).c_str(), "%d %d %d %d %d %d", &sd, &sm, &sy, &ed, &em, &ey);
+
+
+        reservations.emplace_back(id, ln, rn, Date(sd, sm, sy), Date(ed, em, ey));
+    }
+
+
+    ifstream idf("id.txt");
+    if (idf) idf >> nextReservationID;
+}
+
+/* ------------------------ FUNKCJE POMOCNICZE ------------------------ */
+
+bool isLeapYear(int y) {
+    if (y % 400 == 0) return true;
+    if (y % 100 == 0) return false;
+    return (y % 4 == 0);
+}
+
+int daysInMonth(int m, int y) {
+    switch (m) {
+    case 1: return 31;
+    case 2: return isLeapYear(y) ? 29 : 28;
+    case 3: return 31;
+    case 4: return 30;
+    case 5: return 31;
+    case 6: return 30;
+    case 7: return 31;
+    case 8: return 31;
+    case 9: return 30;
+    case 10: return 31;
+    case 11: return 30;
+    case 12: return 31;
+    }
+    return 30;
+}
+
+void printMonthCalendar(int month, int year) {
+    cout << "\nKalendarz: " << month << "." << year << "\n";
+    cout << "Pn Wt Śr Cz Pt So Nd\n";
+
+    Date first(1, month, year);
+    int firstD = (first.dayOfWeekStr() == "Poniedziałek" ? 0 :
+        first.dayOfWeekStr() == "Wtorek" ? 1 :
+        first.dayOfWeekStr() == "Środa" ? 2 :
+        first.dayOfWeekStr() == "Czwartek" ? 3 :
+        first.dayOfWeekStr() == "Piątek" ? 4 :
+        first.dayOfWeekStr() == "Sobota" ? 5 : 6);
+
+    for (int i = 0; i < firstD; i++) cout << "   ";
+
+    int days = daysInMonth(month, year);
+    for (int d = 1; d <= days; d++) {
+        cout << setw(2) << d << " ";
+        if ((firstD + d) % 7 == 0) cout << "\n";
+    }
+    cout << "\n";
+}
+
+bool isRoomFree(int roomNumber, Date start, Date end) {
+    int booked = 0;
+    int maxCount = 1;
+    for (auto& room : rooms)
+        if (room.number == roomNumber) maxCount = room.count;
+
+    for (auto& r : reservations) {
+        if (r.roomNumber == roomNumber) {
+            if (!(end < r.start || r.end < start)) booked++;
         }
     }
-    return true;
+    return booked < maxCount;
 }
 
-void addReservation() {
-    string ln;
-    int rid, people;
-    int d1, m1, y1, d2, m2, y2;
 
-    cout << "Nazwisko: ";
-    cin >> ln;
-
-    cout << "ID pokoju: ";
-    cin >> rid;
-
-    cout << "Liczba osob: ";
-    cin >> people;
-
-    cout << "Data od (d m r): ";
-    cin >> d1 >> m1 >> y1;
-
-    cout << "Data do (d m r): ";
-    cin >> d2 >> m2 >> y2;
-
-    Date from(d1, m1, y1);
-    Date to(d2, m2, y2);
-
-    Room* selected = nullptr;
-    for (auto& r : rooms) if (r.id == rid) selected = &r;
-
-    if (selected == nullptr) {
-        cout << "Taki pokoj nie istnieje!\n";
-        return;
-    }
-
-    if (people > selected->capacity) {
-        cout << "Za duzo osob do tego pokoju!\n";
-        return;
-    }
-
-    if (!isRoomAvailable(rid, from, to)) {
-        cout << "Pokoj zajety w tym terminie!\n";
-        return;
-    }
-
-    reservations.push_back(Reservation(nextResId++, ln, rid, people, from, to));
-    cout << "Rezerwacja dodana.\n";
+bool isWeekend(const Date& date) {
+    string dw = date.dayOfWeekStr();
+    return (dw == "Piątek" || dw == "Sobota" || dw == "Niedziela");
 }
+
+double calculatePrice(const Room& room, const Date& start, const Date& end, int numPersons) {
+    int totalDays = daysBetween(start, end);
+    double price = 0.0;
+
+    // Prosta iteracja po dniach (przybliżenie)
+    Date current = start;
+    for (int i = 0; i < totalDays; i++) {
+        double dayPrice = room.price;
+        if (isWeekend(current)) dayPrice *= 1.2; // +20% weekend
+        price += dayPrice;
+
+        // przejście do następnego dnia
+        current.d++;
+        if (current.d > daysInMonth(current.m, current.y)) {
+            current.d = 1;
+            current.m++;
+            if (current.m > 12) { current.m = 1; current.y++; }
+        }
+    }
+
+    // Rabat >7 dni
+    if (totalDays > 7) price *= 0.9;
+
+    // Zniżka przy większej liczbie osób (>2)
+    if (numPersons > 2) price *= 0.95;
+
+    return price;
+}
+
+
+/* ------------------------ PANEL KLIENTA ------------------------ */
+
+void clientPanel() {
+    cout << "\n==== Rezerwacja pokoju ====\n";
+
+    int sd, sm, sy, ed, em, ey;
+
+    cout << "\nPodaj datę przyjazdu (d m r): ";
+    cin >> sd >> sm >> sy;
+    printMonthCalendar(sm, sy);
+
+    cout << "\nPodaj datę wyjazdu (d m r): ";
+    cin >> ed >> em >> ey;
+    printMonthCalendar(em, ey);
+
+    Date start(sd, sm, sy);
+    Date end(ed, em, ey);
+
+    if (end < start) {
+        cout << "BŁĄD: Data wyjazdu musi być po dacie przyjazdu!\n";
+        return;
+    }
+
+    cout << "\nDni pobytu: " << daysBetween(start, end) << "\n";
+    cout << "Dzień tygodnia przyjazdu: " << start.dayOfWeekStr() << "\n";
+
+    cout << "\nSprawdzanie dostępnych pokoi...\n";
+
+    vector<Room> freeRooms;
+
+    for (auto& room : rooms) {
+        if (isRoomFree(room.number, start, end)) {
+            freeRooms.push_back(room);
+        }
+    }
+
+    if (freeRooms.empty()) {
+        cout << "Brak wolnych pokoi w tym terminie.\n";
+        return;
+    }
+
+    cout << "\nWolne pokoje:\n";
+    for (auto& r : freeRooms) {
+        cout << r.str() << "\n";
+    }
+
+    cout << "\nWybierz numer pokoju: ";
+    int choice;
+    cin >> choice;
+
+    bool exists = false;
+    for (auto& r : freeRooms) {
+        if (r.number == choice) exists = true;
+    }
+    if (!exists) {
+        cout << "Nie ma takiego pokoju na liście.\n";
+        return;
+    }
+
+    cout << "Podaj imię i nazwisko: ";
+    cin.ignore();
+    string name;
+    getline(cin, name);
+
+    int id = reservations.empty() ? 1 : reservations.back().id + 1;
+
+    int numPersons;
+    cout << "Liczba osób: ";
+    cin >> numPersons;
+
+    reservations.emplace_back(id, name, choice, start, end);
+    saveToFile();
+
+    double totalPrice = calculatePrice(freeRooms[choice - 1], start, end, numPersons);
+
+
+    cout << "\n✅ Rezerwacja zakończona!\n";
+    cout << "ID: " << id << "\n";
+    cout << "Klient: " << name << "\n";
+    cout << "Pokój: " << choice << "\n";
+    cout << "Od: " << start.str() << "\n";
+    cout << "Do: " << end.str() << "\n";
+    cout << "Liczba osób: " << numPersons << "\n";
+    cout << "Cena całkowita: " << totalPrice << " zł\n";
+
+}
+
+/* ------------------------ ADMIN / RECEPCJA ------------------------ */
+
+void addReservation() { clientPanel(); }
 
 void cancelReservation() {
     int id;
-    cout << "Podaj ID rezerwacji do anulowania: ";
+    cout << "Podaj ID: ";
     cin >> id;
-
-    for (int i = 0; i < reservations.size(); i++) {
-        if (reservations[i].id == id) {
-            reservations.erase(reservations.begin() + i);
-            cout << "Rezerwacja anulowana.\n";
-            return;
-        }
+    auto it = remove_if(reservations.begin(), reservations.end(),
+        [&](auto& r) { return r.id == id; });
+    if (it != reservations.end()) {
+        reservations.erase(it, reservations.end());
+        saveToFile();
+        cout << "Usunięto.\n";
     }
-    cout << "Nie znaleziono takiej rezerwacji.\n";
+    else cout << "Nie znaleziono.\n";
 }
 
 void modifyReservation() {
     int id;
-    cout << "Podaj ID rezerwacji do modyfikacji: ";
+    cout << "Podaj ID: ";
     cin >> id;
-
     for (auto& r : reservations) {
         if (r.id == id) {
-            cout << "Nowa liczba osob: ";
-            cin >> r.people;
-
-            cout << "Nowa data od (d m r): ";
-            cin >> r.from.day >> r.from.month >> r.from.year;
-
-            cout << "Nowa data do (d m r): ";
-            cin >> r.to.day >> r.to.month >> r.to.year;
-
-            if (!isRoomAvailable(r.roomId, r.from, r.to)) {
-                cout << "Pokoj w tym terminie zajety! Zmiana anulowana.\n";
-                return;
-            }
-
-            cout << "Zmodyfikowano.\n";
+            cout << "Nowy pokój: "; cin >> r.roomNumber;
+            cout << "Nowa data startu (d m r): "; cin >> r.start.d >> r.start.m >> r.start.y;
+            cout << "Nowa data końca (d m r): "; cin >> r.end.d >> r.end.m >> r.end.y;
+            saveToFile();
+            cout << "Zmieniono.\n";
             return;
         }
     }
-    cout << "Brak takiej rezerwacji.\n";
+    cout << "Nie znaleziono.\n";
 }
 
-void searchByLastName() {
-    string ln;
-    cout << "Nazwisko: ";
-    cin >> ln;
+void search() {
+    cout << "1. Po nazwisku\n2. Po dacie\n3. Po ID\nWybór: ";
+    int x; cin >> x;
 
-    for (const auto& r : reservations) {
-        if (r.lastName == ln) {
-            cout << "ID: " << r.id << " pokoj: " << r.roomId << "\n";
+    if (x == 1) {
+        string ln;
+        cout << "Nazwisko: "; cin >> ln;
+        for (auto& r : reservations)
+            if (r.lastname == ln) cout << r.str() << "\n";
+    }
+    else if (x == 2) {
+        int d, m, y;
+        cout << "D M R: "; cin >> d >> m >> y;
+        Date dt(d, m, y);
+        for (auto& r : reservations)
+            if (!(dt < r.start) && !(r.end < dt)) cout << r.str() << "\n";
+    }
+    else if (x == 3) {
+        int id; cout << "ID: "; cin >> id;
+        for (auto& r : reservations)
+            if (r.id == id) cout << r.str() << "\n";
+    }
+}
+
+void adminPanel() {
+    while (true) {
+        cout << "\n=== ADMIN ===\n1. Dodaj pokój\n2. Lista pokoi\n3. Wyloguj\n";
+        int x; cin >> x;
+        if (x == 1) {
+            int n, c, cnt; double p;
+            cout << "Numer: "; cin >> n;
+            cout << "Miejsca: "; cin >> c;
+            cout << "Cena: "; cin >> p;
+            cout << "Ilość identycznych pokoi: "; cin >> cnt;
+            rooms.emplace_back(n, c, p, cnt);
+
+            saveToFile();
         }
+        if (x == 2) for (auto& r : rooms) cout << r.str() << "\n";
+        if (x == 3) return;
     }
 }
 
-void searchByDate() {
-    int d, m, y;
-    cout << "Data (d m r): ";
-    cin >> d >> m >> y;
+void receptionistPanel() {
+    while (true) {
+        cout << "\n=== RECEPCJA ===\n1. Dodaj rezerwację\n2. Usuń rezerwację\n3. Modyfikuj rezerwację\n4. Szukaj\n5. Wyświetl wszystkie\n6. Wyloguj\n";
+        int x; cin >> x;
+        if (x == 1) addReservation();
+        if (x == 2) cancelReservation();
+        if (x == 3) modifyReservation();
+        if (x == 4) search();
+        if (x == 5) for (auto& r : reservations) cout << r.str() << "\n";
+        if (x == 6) return;
+    }
+}
 
-    Date x(d, m, y);
+/* ------------------------ LOGOWANIE ------------------------ */
 
-    for (const auto& r : reservations) {
-        if (x >= r.from && x <= r.to) {
-            cout << "ID: " << r.id
-                << " pokoj: " << r.roomId
-                << " nazwisko: " << r.lastName << "\n";
+bool checkPassword(const string& correct) {
+    string pass;
+    cout << "Hasło: "; cin >> pass;
+    return pass == correct;
+}
+
+void login() {
+    while (true) {
+        cout << "\n=== LOGOWANIE ===\n1. Admin\n2. Recepcjonistka\n3. Klient\n4. Wyjście\n";
+        int x; cin >> x;
+        if (x == 1) {
+            if (checkPassword("admin123")) adminPanel();
+            else cout << "Błędne hasło!\n";
         }
-    }
-}
-
-void searchById() {
-    int id;
-    cout << "ID: ";
-    cin >> id;
-
-    for (const auto& r : reservations) {
-        if (r.id == id) {
-            cout << "Znaleziono: " << r.lastName
-                << ", pokoj " << r.roomId << "\n";
-            return;
+        if (x == 2) {
+            if (checkPassword("recepcja123")) receptionistPanel();
+            else cout << "Błędne hasło!\n";
         }
+        if (x == 3) clientPanel();
+        if (x == 4) exit(0);
     }
-    cout << "Brak.\n";
 }
 
-void saveRooms() {
-    ofstream file("rooms.txt");
-    if (!file) { cout << "Blad zapisu rooms.txt\n"; return; }
-
-    for (auto& r : rooms) {
-        file << r.id << " " << r.type << " "
-            << r.capacity << " " << r.basePrice << "\n";
-    }
-
-    file.close();
-    cout << "Zapisano pokoje.\n";
-}
-
-void loadRooms() {
-    ifstream file("rooms.txt");
-    if (!file) return;
-
-    rooms.clear();
-
-    int id, cap;
-    string type;
-    double price;
-
-    while (file >> id >> type >> cap >> price) {
-        rooms.push_back(Room(id, type, cap, price));
-    }
-
-    file.close();
-    cout << "Wczytano pokoje.\n";
-}
-
-void saveReservations() {
-    ofstream file("reservations.txt");
-    if (!file) { cout << "Blad zapisu reservations.txt\n"; return; }
-
-    for (auto& r : reservations) {
-        file << r.id << " " << r.lastName << " " << r.roomId << " "
-            << r.people << " "
-            << r.from.day << " " << r.from.month << " " << r.from.year << " "
-            << r.to.day << " " << r.to.month << " " << r.to.year << "\n";
-    }
-
-    file.close();
-    cout << "Zapisano rezerwacje.\n";
-}
-
-void loadReservations() {
-    ifstream file("reservations.txt");
-    if (!file) return;
-
-    reservations.clear();
-
-    int id, rid, people;
-    int d1, m1, y1, d2, m2, y2;
-    string ln;
-
-    while (file >> id >> ln >> rid >> people
-        >> d1 >> m1 >> y1
-        >> d2 >> m2 >> y2)
-    {
-        reservations.push_back(
-            Reservation(id, ln, rid, people,
-                Date(d1, m1, y1),
-                Date(d2, m2, y2))
-        );
-
-        if (id >= nextResId) nextResId = id + 1;
-    }
-
-    file.close();
-    cout << "Wczytano rezerwacje.\n";
-}
-
-void menu() {
-    cout << "\n--- MENU ---\n";
-    cout << "1. Dodaj rezerwacje\n";
-    cout << "2. Anuluj rezerwacje\n";
-    cout << "3. Modyfikuj rezerwacje\n";
-    cout << "4. Szukaj po nazwisku\n";
-    cout << "5. Szukaj po dacie\n";
-    cout << "6. Szukaj po ID\n";
-    cout << "7. Zapisz dane\n";
-    cout << "8. Wczytaj dane\n";
-    cout << "0. Wyjdz\n";
-}
+/* ------------------------ MAIN ------------------------ */
 
 int main() {
-    loadRooms();
-    loadReservations();
+    setlocale(LC_ALL, "");
+    system("chcp 65001 > nul");
 
-    if (rooms.size() == 0) {
-        rooms.push_back(Room(1, "single", 1, 100));
-        rooms.push_back(Room(2, "double", 2, 150));
-        rooms.push_back(Room(3, "suite", 4, 300));
-    }
-
-    int op;
-    while (true) {
-        menu();
-        cout << "Wybor: ";
-        cin >> op;
-
-        if (op == 0) break;
-        if (op == 1) addReservation();
-        if (op == 2) cancelReservation();
-        if (op == 3) modifyReservation();
-        if (op == 4) searchByLastName();
-        if (op == 5) searchByDate();
-        if (op == 6) searchById();
-        if (op == 7) { saveRooms(); saveReservations(); }
-        if (op == 8) { loadRooms(); loadReservations(); }
-    }
-
+    loadFromFile();
+    login();
     return 0;
 }
