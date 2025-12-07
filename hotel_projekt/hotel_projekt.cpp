@@ -517,7 +517,7 @@ void clientPanelUI() {
 
     while (true) {
         fetchConsoleSize();
-        drawMenu(menu, "=== KLIENT ===");
+        drawMenu(menu, "====== KLIENT ======");
         clearRightSide();
 
         setCursorRight(2, 2); cout << "Wybierz opcje: ";
@@ -618,7 +618,7 @@ void adminPanelUI() {
     vector<string> menu = { "1. Dodaj pokój", "2. Lista pokoi", "3. Usuń pokój", "4. Wyloguj" };
     while (true) {
         fetchConsoleSize();
-        drawMenu(menu, "=== ADMIN ===");
+        drawMenu(menu, "======= ADMIN =======");
         clearRightSide();
         setCursorRight(2, 2); cout << "Wybierz opcje: ";
         gotoXY(RIGHT_X + 16, 2);
@@ -688,7 +688,7 @@ void receptionistPanelUI() {
 
     while (true) {
         fetchConsoleSize();
-        drawMenu(menu, "=== RECEPCJA ===");
+        drawMenu(menu, "===== RECEPCJA =====");
         clearRightSide();
         setCursorRight(2, 2); cout << "Wybierz opcje: ";
         gotoXY(RIGHT_X + 16, 2);
@@ -708,6 +708,80 @@ void receptionistPanelUI() {
 }
 
 /* ------------------------ LOGOWANIE I MAIN UI ------------------------ */
+
+struct User {
+    string login, password;
+};
+vector<User> users;
+
+
+void loadUsers() {
+    users.clear();
+    ifstream f("users.txt");
+    if (!f.good()) return;
+    string l, p;
+    while (f >> l >> p) users.push_back({ l, p });
+}
+
+void saveUsers() {
+    ofstream f("users.txt");
+    for (auto& u : users) f << u.login << " " << u.password << "\n";
+}
+
+
+void registerClient() {
+    clearRightSide();
+    setCursorRight(2, 2); cout << "=== Rejestracja klienta ===";
+
+    string login, pass;
+
+    setCursorRight(2, 4); cout << "Login: ";
+    gotoXY(RIGHT_X + 10, 4);
+    cin >> login;
+
+    // sprawdzanie czy login istnieje
+    for (auto& u : users)
+        if (u.login == login) {
+            printRight(6, "Taki login juz istnieje!");
+            pauseIfNeeded();
+            return;
+        }
+
+    setCursorRight(2, 5); cout << "Haslo: ";
+    gotoXY(RIGHT_X + 10, 5);
+    cin >> pass;
+
+    users.push_back({ login, pass });
+    saveUsers();
+
+    printRight(7, "Utworzono konto!");
+    pauseIfNeeded();
+}
+
+
+bool loginClient() {
+    clearRightSide();
+    setCursorRight(2, 2); cout << "=== Logowanie klienta ===";
+
+    string login, pass;
+
+    setCursorRight(2, 4); cout << "Login: ";
+    gotoXY(RIGHT_X + 10, 4);
+    cin >> login;
+
+    setCursorRight(2, 5); cout << "Haslo: ";
+    gotoXY(RIGHT_X + 10, 5);
+    cin >> pass;
+
+    for (auto& u : users)
+        if (u.login == login && u.password == pass)
+            return true;
+
+    printRight(7, "Bledne dane logowania!");
+    pauseIfNeeded();
+    return false;
+}
+
 
 bool checkPassword(const string& correct) {
     string pass;
@@ -739,10 +813,30 @@ void mainUI() {
             else printRight(8, "Bledne haslo!");
         }
         else if (x == 3) {
-            setCursorRight(2, 2); cout << "Logowanie klienta";
-            if (checkPassword("klient123")) clientPanelUI();
-            else printRight(8, "Bledne haslo!"); 
+            vector<string> clientMenu = { "1. Logowanie", "2. Rejestracja", "3. Powrot" };
+
+            while (true) {
+                drawMenu(clientMenu, "=== KLIENT ===");
+                clearRightSide();
+
+                setCursorRight(2, 2); cout << "Wybierz opcje: ";
+                gotoXY(RIGHT_X + 16, 2);
+
+                int c; cin >> c;
+                clearRightSide();
+
+                if (c == 1) {
+                    if (loginClient()) {
+                        clientPanelUI();
+                    }
+                }
+                else if (c == 2) {
+                    registerClient();
+                }
+                else if (c == 3) break;
+            }
         }
+
         else if (x == 4) {
             printRight(4, "Zamykanie...");
             return;
