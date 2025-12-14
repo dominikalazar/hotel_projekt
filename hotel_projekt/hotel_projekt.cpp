@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <sstream>
 #include <limits>
+#include <conio.h>
+
 
 using namespace std;
 
@@ -18,7 +20,6 @@ int CONSOLE_HEIGHT = 40;
 int RIGHT_X = LEFT_WIDTH + 1;
 int RIGHT_WIDTH = 80;
 
-/* ------------------------ KLASA DATE ------------------------ */
 
 class Date {
 public:
@@ -41,7 +42,6 @@ public:
         return to_string(d) + "." + to_string(m) + "." + to_string(y);
     }
 
-    // Zeller
     string dayOfWeek() const {
         int dd = d;
         int mm = m;
@@ -68,14 +68,13 @@ int daysBetween(const Date& start, const Date& end) {
     return (end.y - start.y) * 365 + (end.m - start.m) * 30 + (end.d - start.d) + 1;
 }
 
-/* ------------------------ KLASA ROOM ------------------------ */
 
 class Room {
 public:
-    int number;      // identyfikator/typ
-    int capacity;    // maks. osób
-    double price;    // cena bazowa za noc
-    int count;       // ile takich pokoi
+    int number;      
+    int capacity;    
+    double price;    
+    int count;      
 
     Room() {}
     Room(int n, int c, double p, int cnt = 1) : number(n), capacity(c), price(p), count(cnt) {}
@@ -88,7 +87,6 @@ public:
     }
 };
 
-/* ------------------------ KLASA RESERVATION ------------------------ */
 
 class Reservation {
 public:
@@ -118,14 +116,62 @@ public:
     }
 };
 
-/* ------------------------ GLOBALNE DANE ------------------------ */
+struct User {
+    string login;
+    string password;
+    string role; 
+};
+
+vector<User> users;
+
 
 vector<Room> rooms;
 vector<Reservation> reservations;
 int nextReservationID = 1;
 
-/* ------------------------ KONSOLA / UI ------------------------ */
+string inputPassword() {
+    string pass;
+    char ch;
 
+    while (true) {
+        ch = _getch();  
+
+        if (ch == 13) break;         
+        if (ch == 8) {                
+            if (!pass.empty()) {
+                pass.pop_back();
+                cout << "\b \b";      
+            }
+        }
+        else {
+            pass.push_back(ch);
+            cout << "*";           
+        }
+    }
+    cout << endl;
+    return pass;
+}
+
+
+
+void loadUsers() {
+    users.clear();
+    ifstream f("users.txt");
+    if (!f.good()) return;
+
+    string l, p, r;
+    while (f >> l >> p >> r) {
+        users.push_back({ l, p, r });
+    }
+}
+
+
+void saveUsers() {
+    ofstream f("users.txt");
+    for (auto& u : users) {
+        f << u.login << " " << u.password << " " << u.role << "\n";
+    }
+}
 
 
 void fetchConsoleSize() {
@@ -163,14 +209,11 @@ void clearRightSide() {
     }
 }
 
-// czyści lewą kolumnę i narysuje ramkę
 void drawMenuBox() {
-    // lewa kolumna tła (proste wypełnienie)
     for (int y = 0; y < CONSOLE_HEIGHT; ++y) {
         gotoXY(0, y);
         cout << string(LEFT_WIDTH, ' ');
     }
-    // lewa ramka góra
     gotoXY(0, 0);
     cout << string(LEFT_WIDTH, '=');
     for (int y = 1; y < CONSOLE_HEIGHT - 1; ++y) {
@@ -209,17 +252,15 @@ void drawMenu(const vector<string>& options, const string& title) {
 }
 
 void pauseIfNeeded() {
-    gotoXY(RIGHT_X + 100, 30); // ustaw kursor w prawym panelu
-    cin.clear();              // usuń flagi błędów
+    gotoXY(RIGHT_X + 100, 30); 
+    cin.clear();             
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
-    //cout << "\n > Kontynuuj [ENTER]...";
-    cin.get();                // czekaj na Enter
+    cin.get();          
 }
 
 
-// wypisuje tekst po prawej, linia (y) i opcjonalnie przesunięcie kolumny
+
 void printRight(int row, const string& text) {
-    // podziel na linie jeśli za długie
     int maxw = RIGHT_WIDTH;
     int startCol = 2;
     int printed = 0;
@@ -239,10 +280,8 @@ void setColor(int color) {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
 }
 
-/* ------------------------ ZAPIS / ODCZYT (z obsługą spacji w nazwisku) ------------------------ */
 
 void saveToFile() {
-    // rooms: number capacity price count
     ofstream f("rooms.txt");
     for (auto& r : rooms)
         f << r.number << " " << r.capacity << " " << r.price << " " << r.count << "\n";
@@ -250,7 +289,6 @@ void saveToFile() {
 
     ofstream rfile("reservations.txt");
     for (auto& r : reservations) {
-        // format: id|lastname|room|startD startM startY endD endM endY persons
         rfile << r.id << "|" << r.lastname << "|" << r.roomNumber << "|"
             << r.start.d << " " << r.start.m << " " << r.start.y << " "
             << r.end.d << " " << r.end.m << " " << r.end.y << " "
@@ -304,7 +342,6 @@ void loadFromFile() {
     idf.close();
 }
 
-/* ------------------------ POMOCNICZE (dostępność, kalendarz, ceny) ------------------------ */
 
 bool isLeapYear(int y) {
     if (y % 400 == 0) return true;
@@ -337,7 +374,6 @@ void printMonthCalendarRight(int month, int year, int topRow) {
     printRight(topRow + 1, "Pn Wt Śr Cz Pt So Nd");
 
     Date first(1, month, year);
-    // compute index 0=Mon ... 6=Sun
     string w = first.dayOfWeekStr();
     int firstD = (w == "Poniedziałek" ? 0 :
         w == "Wtorek" ? 1 :
@@ -407,7 +443,6 @@ double calculatePrice(const Room& room, const Date& start, const Date& end, int 
     return price;
 }
 
-/* ------------------------ PANELE (wyświetlają po prawej) ------------------------ */
 
 void showReservationsListRight(int topRow) {
     int row = topRow;
@@ -425,12 +460,65 @@ void showRoomsListRight(int topRow) {
     }
 }
 
-/* ------------------------ FUNKCJE REZERWACJI ------------------------ */
+void addUserByAdmin() {
+    clearRightSide();
+
+    string login, pass, role;
+
+    setCursorRight(2, 2); cout << "Login: ";
+    gotoXY(RIGHT_X + 10, 2); cin >> login;
+
+    for (auto& u : users)
+        if (u.login == login) {
+            printRight(4, "Login juz istnieje!");
+            pauseIfNeeded();
+            return;
+        }
+
+    setCursorRight(2, 3); cout << "Haslo: ";
+    gotoXY(RIGHT_X + 10, 3); cin >> pass;
+
+    setCursorRight(2, 4); cout << "Rola (client/reception): ";
+    gotoXY(RIGHT_X + 30, 4); cin >> role;
+
+    if (role != "client" && role != "reception") {
+        printRight(6, "Niepoprawna rola!");
+        pauseIfNeeded();
+        return;
+    }
+
+    users.push_back({ login, pass, role });
+    saveUsers();
+
+    printRight(6, "Konto utworzone.");
+    pauseIfNeeded();
+}
+
+void removeUserByAdmin() {
+    clearRightSide();
+    setCursorRight(2, 2); cout << "Login do usuniecia: ";
+    gotoXY(RIGHT_X + 20, 2);
+
+    string login; cin >> login;
+
+    auto it = remove_if(users.begin(), users.end(),
+        [&](User& u) { return u.login == login; });
+
+    if (it != users.end()) {
+        users.erase(it, users.end());
+        saveUsers();
+        printRight(4, "Konto usuniete.");
+    }
+    else {
+        printRight(4, "Nie znaleziono konta.");
+    }
+
+    pauseIfNeeded();
+}
 
 void addReservationRight() {
     clearRightSide();
 
-    // --- DODAWANIE REZERWACJI ---
     int sd, sm, sy, ed, em, ey;
     setCursorRight(2, 2); cout << "Data przyjazdu (d m r): ";
     gotoXY(RIGHT_X + 25, 2); cin >> sd >> sm >> sy;
@@ -451,7 +539,6 @@ void addReservationRight() {
     printRight(top++, s1.str());
     printRight(top++, "Dzien przyjazdu: " + start.dayOfWeekStr());
 
-    // lista wolnych pokoi
     vector<Room> freeRooms;
     for (auto& room : rooms) {
         if (isRoomFreeCounted(room.number, start, end)) freeRooms.push_back(room);
@@ -481,7 +568,6 @@ void addReservationRight() {
         return;
     }
 
-    // dane klienta
     printRight(top + 2, "Podaj imie i nazwisko:");
     gotoXY(RIGHT_X + 2, top + 3);
     cin.ignore();
@@ -512,7 +598,7 @@ void addReservationRight() {
 }
 
 void clientPanelUI() {
-    setColor(1);
+    setColor(3);
     vector<string> menu = { "1. Dodaj rezerwacje", "2. Wyloguj", "3. Inne" };
 
     while (true) {
@@ -527,7 +613,7 @@ void clientPanelUI() {
         clearRightSide();
 
         if (choice == 1) {
-            addReservationRight();  // wywołanie nowej funkcji
+            addReservationRight();  
         }
         else if (choice == 2) {
             setColor(7);
@@ -608,14 +694,21 @@ void searchRight() {
     }
 }
 
-/* ------------------------ ADMIN / RECEPCJA PANELE (z menu po lewej) ------------------------ */
 
 void adminPanelUI();
 void receptionistPanelUI();
 
 void adminPanelUI() {
     setColor(2);
-    vector<string> menu = { "1. Dodaj pokój", "2. Lista pokoi", "3. Usuń pokój", "4. Wyloguj" };
+    vector<string> menu = {
+    "1. Dodaj pokój",
+    "2. Lista pokoi",
+    "3. Usuń pokój",
+    "4. Dodaj konto",
+    "5. Usuń konto",
+    "6. Wyloguj"
+    };
+
     while (true) {
         fetchConsoleSize();
         drawMenu(menu, "======= ADMIN =======");
@@ -627,7 +720,6 @@ void adminPanelUI() {
 
         if (x == 1) {
             int c, cnt; double p;
-            // obliczamy nowy numer pokoju
             int newNumber = 1;
             for (auto& r : rooms) if (r.number >= newNumber) newNumber = r.number + 1;
 
@@ -644,7 +736,7 @@ void adminPanelUI() {
             showRoomsListRight(4);
         }
         else if (x == 3) {
-            showRoomsListRight(4); // pokaż listę, żeby wiedzieć jakie ID
+            showRoomsListRight(4); 
             setCursorRight(2, 10); cout << "Podaj numer pokoju do usunięcia: ";
             gotoXY(RIGHT_X + 35, 10); int num; cin >> num;
 
@@ -666,10 +758,13 @@ void adminPanelUI() {
                 printRight(12, "Nie znaleziono pokoju o podanym numerze.");
             }
         }
-        else if (x == 4) {
+        else if (x == 4) addUserByAdmin();
+        else if (x == 5) removeUserByAdmin();
+        else if (x == 6) {
             setColor(7);
             return;
         }
+
         pauseIfNeeded();
     }
 }
@@ -707,26 +802,10 @@ void receptionistPanelUI() {
     }
 }
 
-/* ------------------------ LOGOWANIE I MAIN UI ------------------------ */
-
-struct User {
-    string login, password;
-};
-vector<User> users;
 
 
-void loadUsers() {
-    users.clear();
-    ifstream f("users.txt");
-    if (!f.good()) return;
-    string l, p;
-    while (f >> l >> p) users.push_back({ l, p });
-}
 
-void saveUsers() {
-    ofstream f("users.txt");
-    for (auto& u : users) f << u.login << " " << u.password << "\n";
-}
+
 
 
 void registerClient() {
@@ -739,10 +818,9 @@ void registerClient() {
     gotoXY(RIGHT_X + 10, 4);
     cin >> login;
 
-    // sprawdzanie czy login istnieje
     for (auto& u : users)
         if (u.login == login) {
-            printRight(6, "Taki login juz istnieje!");
+            printRight(6, "Login zajety!");
             pauseIfNeeded();
             return;
         }
@@ -751,43 +829,45 @@ void registerClient() {
     gotoXY(RIGHT_X + 10, 5);
     cin >> pass;
 
-    users.push_back({ login, pass });
+    users.push_back({ login, pass, "client" });
     saveUsers();
 
-    printRight(7, "Utworzono konto!");
+    printRight(7, "Konto klienta utworzone.");
     pauseIfNeeded();
 }
 
 
-bool loginClient() {
+
+
+
+bool loginUser(const string& role) {
     clearRightSide();
-    setCursorRight(2, 2); cout << "=== Logowanie klienta ===";
+    setCursorRight(2, 2); cout << "Login: ";
+    gotoXY(RIGHT_X + 10, 2);
+    string login; cin >> login;
 
-    string login, pass;
+    setCursorRight(2, 3); cout << "Haslo: ";
+    gotoXY(RIGHT_X + 10, 3);
+    string pass = inputPassword();
 
-    setCursorRight(2, 4); cout << "Login: ";
-    gotoXY(RIGHT_X + 10, 4);
-    cin >> login;
-
-    setCursorRight(2, 5); cout << "Haslo: ";
-    gotoXY(RIGHT_X + 10, 5);
-    cin >> pass;
-
-    for (auto& u : users)
-        if (u.login == login && u.password == pass)
+    for (auto& u : users) {
+        if (u.login == login && u.password == pass && u.role == role)
             return true;
+    }
 
-    printRight(7, "Bledne dane logowania!");
+    printRight(5, "Bledny login / haslo!");
     pauseIfNeeded();
     return false;
 }
+
+
 
 
 bool checkPassword(const string& correct) {
     string pass;
     setCursorRight(2, 4); cout << "Haslo: ";
     gotoXY(RIGHT_X + 10, 4);
-    cin >> pass;
+    pass = inputPassword();
     return pass == correct;
 }
 
@@ -802,15 +882,13 @@ void mainUI() {
         int x; cin >> x;
         clearRightSide();
         if (x == 1) {
-            // admin login
             setCursorRight(2, 2); cout << "Logowanie admina";
             if (checkPassword("admin123")) adminPanelUI();
             else printRight(8, "Bledne haslo!");
         }
         else if (x == 2) {
             setCursorRight(2, 2); cout << "Logowanie recepcji";
-            if (checkPassword("recepcja123")) receptionistPanelUI();
-            else printRight(8, "Bledne haslo!");
+            if (loginUser("reception")) receptionistPanelUI();
         }
         else if (x == 3) {
             vector<string> clientMenu = { "1. Logowanie", "2. Rejestracja", "3. Powrot" };
@@ -826,9 +904,8 @@ void mainUI() {
                 clearRightSide();
 
                 if (c == 1) {
-                    if (loginClient()) {
-                        clientPanelUI();
-                    }
+                    if (loginUser("client")) clientPanelUI();
+
                 }
                 else if (c == 2) {
                     registerClient();
@@ -846,14 +923,13 @@ void mainUI() {
 }
 
 
-
-/* ------------------------ MAIN ------------------------ */
-
 int main() {
     setlocale(LC_ALL, "");
     fetchConsoleSize();
     clearRightSide();
     loadFromFile();
+    loadUsers();
+
 
 
     mainUI();
